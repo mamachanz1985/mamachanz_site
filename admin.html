@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>お便り管理 | 知りたい！ママchanず</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        pop: {
+                            pink: '#FF8FB3',
+                            yellow: '#FCE651',
+                            orange: '#FFBA94',
+                            blue: '#98D6EA',
+                            dark: '#5C4A3D',
+                            light: '#FFFDF9'
+                        }
+                    },
+                    fontFamily: {
+                        rounded: ['"Zen Maru Gothic"', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Zen Maru Gothic', sans-serif;
+            color: #5C4A3D;
+            background-color: #F8F9FA;
+        }
+        .brutal-box {
+            background-color: #fff;
+            border: 3px solid #5C4A3D;
+            border-radius: 12px;
+            box-shadow: 3px 3px 0px #5C4A3D;
+        }
+        .badge-unread { background-color: #FF8FB3; color: white; }
+        .badge-read { background-color: #98D6EA; color: #5C4A3D; }
+        .badge-featured { background-color: #FCE651; color: #5C4A3D; }
+    </style>
+</head>
+<body class="antialiased">
+
+    <nav class="bg-white border-b-[3px] border-pop-dark px-6 py-4 flex justify-between items-center sticky top-0 z-10 shadow-sm">
+        <div class="flex items-center gap-3">
+            <div class="bg-pop-yellow p-2 rounded-full border-[2px] border-pop-dark flex items-center justify-center">
+                <i class="fas fa-envelope-open-text text-pop-dark"></i>
+            </div>
+            <span class="text-xl font-black text-pop-dark tracking-wide">
+                ママchanず お便り管理ボード
+            </span>
+        </div>
+        <a href="/" class="text-sm font-bold bg-gray-100 hover:bg-gray-200 px-4 py-2 rounded-lg border-[2px] border-pop-dark transition-colors">
+            サイトを表示
+        </a>
+    </nav>
+
+    <main class="max-w-5xl mx-auto p-6">
+        <div class="mb-6 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+            <div>
+                <h1 class="text-2xl font-black mb-1">受信トレイ</h1>
+                <p class="text-sm font-bold text-gray-500">視聴者からの温かいお便り一覧です。</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+                <a href="/api/inquiries/export" class="text-sm font-bold bg-pop-blue text-pop-dark px-4 py-2 border-[2px] border-pop-dark rounded-lg shadow-[2px_2px_0px_#5C4A3D] hover:-translate-y-1 hover:shadow-[3px_3px_0px_#5C4A3D] transition-all">
+                    <i class="fas fa-file-csv mr-1"></i> エクスポート
+                </a>
+                <button onclick="resetDatabase()" class="text-sm font-bold bg-red-100 text-red-600 px-4 py-2 border-[2px] border-red-600 rounded-lg shadow-[2px_2px_0px_#DC2626] hover:-translate-y-1 hover:bg-red-200 transition-all">
+                    <i class="fas fa-trash-alt mr-1"></i> リセット
+                </button>
+                <div class="text-sm font-bold bg-white px-4 py-2 border-[2px] border-pop-dark rounded-lg shadow-[2px_2px_0px_#5C4A3D]">
+                    合計 <span id="totalCount" class="text-pop-pink font-black text-lg">0</span> 件
+                </div>
+            </div>
+        </div>
+
+        <!-- ローディング表示 -->
+        <div id="loading" class="text-center py-12">
+            <i class="fas fa-spinner fa-spin text-4xl text-gray-400"></i>
+            <p class="mt-4 font-bold text-gray-500">お便りを読み込み中...</p>
+        </div>
+
+        <!-- エラー表示 -->
+        <div id="errorMsg" class="hidden text-center py-6 text-red-500 font-bold"></div>
+
+        <!-- 一覧リスト -->
+        <div id="inquiriesList" class="space-y-4 hidden">
+            <!-- テンプレートがここに挿入されます -->
+        </div>
+
+    </main>
+
+    <script>
+        // お便り一覧の取得と描画
+        async function fetchInquiries() {
+            const list = document.getElementById('inquiriesList');
+            const loader = document.getElementById('loading');
+            const errorMsg = document.getElementById('errorMsg');
+            const totalCount = document.getElementById('totalCount');
+
+            try {
+                const res = await fetch('/api/inquiries');
+                if (!res.ok) throw new Error('通信エラーが発生しました');
+                
+                const data = await res.json();
+                loader.classList.add('hidden');
+                
+                if (data.inquiries.length === 0) {
+                    list.innerHTML = '<div class="text-center py-12 text-gray-500 font-bold">まだお便りはありません。</div>';
+                    list.classList.remove('hidden');
+                    return;
+                }
+
+                totalCount.textContent = data.inquiries.length;
+                list.innerHTML = '';
+
+                data.inquiries.forEach(inquiry => {
+                    const date = new Date(inquiry.created_at).toLocaleString('ja-JP', {
+                        year: 'numeric', month: '2-digit', day: '2-digit',
+                        hour: '2-digit', minute: '2-digit'
+                    });
+
+                    // ステータスバッジのスタイル決定
+                    let badgeClass = 'badge-unread';
+                    if(inquiry.status === '確認済み') badgeClass = 'badge-read';
+                    if(inquiry.status === '番組紹介') badgeClass = 'badge-featured';
+
+                    const card = document.createElement('div');
+                    card.className = 'brutal-box p-5 bg-white relative hover:-translate-y-1 transition-transform';
+                    card.innerHTML = `
+                        <div class="flex justify-between items-start mb-3">
+                            <div class="flex items-center gap-3">
+                                <span class="px-3 py-1 rounded-full text-xs font-black border-[2px] border-pop-dark ${badgeClass}" id="badge-${inquiry.id}">
+                                    ${inquiry.status}
+                                </span>
+                                <h2 class="text-lg font-black">${escapeHtml(inquiry.pen_name)} さん</h2>
+                            </div>
+                            <span class="text-xs font-bold text-gray-500">${date}</span>
+                        </div>
+                        <div class="bg-gray-50 p-4 rounded-xl border-[2px] border-gray-200 mb-4 whitespace-pre-wrap font-bold text-sm">${escapeHtml(inquiry.message)}</div>
+                        
+                        <div class="flex gap-2">
+                            <select onchange="updateStatus(${inquiry.id}, this.value)" class="text-sm font-bold bg-white border-[2px] border-pop-dark rounded-lg px-3 py-2 cursor-pointer focus:outline-none">
+                                <option value="未読" ${inquiry.status === '未読' ? 'selected' : ''}>未読</option>
+                                <option value="確認済み" ${inquiry.status === '確認済み' ? 'selected' : ''}>確認済み</option>
+                                <option value="番組紹介" ${inquiry.status === '番組紹介' ? 'selected' : ''}>番組紹介</option>
+                            </select>
+                        </div>
+                    `;
+                    list.appendChild(card);
+                });
+
+                list.classList.remove('hidden');
+
+            } catch (err) {
+                loader.classList.add('hidden');
+                errorMsg.textContent = 'データの読み込みに失敗しました。';
+                errorMsg.classList.remove('hidden');
+            }
+        }
+
+        // ステータス更新処理
+        async function updateStatus(id, newStatus) {
+            try {
+                const res = await fetch(`/api/inquiries/${id}/status`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: newStatus })
+                });
+
+                if (!res.ok) throw new Error('ステータス更新失敗');
+                
+                // バッジの見た目も更新
+                const badge = document.getElementById(`badge-${id}`);
+                badge.textContent = newStatus;
+                badge.className = `px-3 py-1 rounded-full text-xs font-black border-[2px] border-pop-dark ${
+                    newStatus === '未読' ? 'badge-unread' :
+                    newStatus === '確認済み' ? 'badge-read' : 'badge-featured'
+                }`;
+
+            } catch (err) {
+                alert('ステータスの更新に失敗しました。');
+            }
+        }
+
+        // データベースリセット処理
+        async function resetDatabase() {
+            if (!confirm('本当にすべてのデータを削除しますか？\n（エクスポートでバックアップを取ることを推奨します）\n※この操作は取り消せません！')) {
+                return;
+            }
+
+            try {
+                const submitBtn = event.currentTarget;
+                const originalHtml = submitBtn.innerHTML;
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> 処理中..';
+                submitBtn.disabled = true;
+
+                const res = await fetch('/api/inquiries/reset', {
+                    method: 'DELETE'
+                });
+
+                if (!res.ok) throw new Error('リセット失敗');
+                
+                alert('すべてのデータを削除しました。');
+                fetchInquiries(); // リストを再読み込み
+            } catch (err) {
+                alert('データのリセットに失敗しました。');
+            } finally {
+                // ボタン状態を戻す（削除されたらリスト再描画されるので不要かもしれないが一応）
+            }
+        }
+
+        // XSS対策のサニタイズ関数
+        function escapeHtml(unsafe) {
+            return unsafe
+                 .replace(/&/g, "&amp;")
+                 .replace(/</g, "&lt;")
+                 .replace(/>/g, "&gt;")
+                 .replace(/"/g, "&quot;")
+                 .replace(/'/g, "&#039;");
+        }
+
+        // 初期読み込み
+        fetchInquiries();
+    </script>
+</body>
+</html>
